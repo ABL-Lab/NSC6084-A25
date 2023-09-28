@@ -40,8 +40,8 @@ PARAMETER {
     mg = 1             (mM)  : Initial concentration of mg2+
     mggate
     
-    gmax_AMPA = .001   (uS)  : Weight conversion factor (from nS to uS)
-    gmax_NMDA = .001   (uS)  : Weight conversion factor (from nS to uS)
+    gmax_AMPA = .001   (uS)  : Peak conductance of AMPA in units of uS
+    gmax_NMDA = .001   (uS)  : Peak conductance of NMDA in units of uS
 
 }
 
