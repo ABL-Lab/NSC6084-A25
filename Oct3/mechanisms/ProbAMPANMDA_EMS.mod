@@ -53,6 +53,10 @@ releases, it will transition to the unrecovered state.  Recovery is as
 a Poisson process with rate 1/Dep.
 
 This model satisfies all of (1)-(4).
+
+2022-10-17 - Updated notation to reflect Fuhrmann, 2002 (EM)
+
+
 ENDCOMMENT
 
 COMMENT                                                                          
@@ -68,7 +72,7 @@ NEURON {
     THREADSAFE
         POINT_PROCESS ProbAMPANMDA_EMS
         RANGE tau_r_AMPA, tau_d_AMPA, tau_r_NMDA, tau_d_NMDA
-        RANGE Use, u, Dep, Fac, u0, mg, Rstate, tsyn_fac, u
+        RANGE U1, tau_rec, tau_facil, Use_init, mg, R, tsyn_fac, U_se
         RANGE i, i_AMPA, i_NMDA, g_AMPA, g_NMDA, g, e, NMDA_ratio
         RANGE A_AMPA_step, B_AMPA_step, A_NMDA_step, B_NMDA_step
         NONSPECIFIC_CURRENT i
@@ -83,17 +87,17 @@ PARAMETER {
         tau_d_AMPA = 1.7    (ms)  : IMPORTANT: tau_r < tau_d
         tau_r_NMDA = 0.29   (ms) : dual-exponential conductance profile
         tau_d_NMDA = 43     (ms) : IMPORTANT: tau_r < tau_d
-        Use = 1.0   (1)   : Utilization of synaptic efficacy (just initial values! Use, Dep and Fac are overwritten by BlueBuilder assigned values) 
-        Dep = 100   (ms)  : relaxation time constant from depression
-        Fac = 10   (ms)  :  relaxation time constant from facilitation
+        U1 = 1.0   (1)   : release probability in absence of facilitation 
+        tau_rec = 100   (ms)  : recovery time constant from depression
+        tau_facil = 10   (ms)  :  relaxation time constant from facilitation
         e = 0     (mV)  : AMPA and NMDA reversal potential
         mg = 1   (mM)  : initial concentration of mg2+
         mggate
         gmax = .001 (uS) : weight conversion factor (from nS to uS)
-        u0 = 0 :initial value of u, which is the running value of release probability
+        U_se_init = 0 :initial value of U_se
         synapseID = 0
         verboseLevel = 0
-	NMDA_ratio = 0.71 (1) : The ratio of NMDA to AMPA
+        NMDA_ratio = 0.71 (1) : The ratio of NMDA to AMPA
 }
 
 COMMENT
@@ -131,13 +135,13 @@ ASSIGNED {
         rng
 
 	: Recording these three, you can observe full state of model
-	: tsyn_fac gives you presynaptic times, Rstate gives you 
+	: tsyn_fac gives you presynaptic times, R gives you 
         : state transitions,
-        : u gives you the "release probability" at transitions 
-        : (attention: u is event based based, so only valid at incoming events)
-	Rstate (1) : recovered state {0=unrecovered, 1=recovered}
+        : R*U_se gives you the "release probability" at transitions 
+        : (attention: U_se is event based based, so only valid at incoming events)
+	R (1) : recovered state {0=unrecovered, 1=recovered}
 	tsyn_fac (ms) : the time of the last spike
-	u (1) : running release probability
+	U_se (1) : running release probability
 
 }
 
@@ -153,9 +157,9 @@ INITIAL{
 
         LOCAL tp_AMPA, tp_NMDA
 
-	Rstate=1
+	R=1
 	tsyn_fac=0
-	u=u0
+	U_se=U_se_init
         
         A_AMPA = 0
         B_AMPA = 0
@@ -218,13 +222,13 @@ ENDVERBATIM
     }
 
         : calc u at event-
-        if (Fac > 0) {
-                u = u*exp(-(t - tsyn_fac)/Fac) :update facilitation variable if Fac>0 Eq. 2 in Fuhrmann et al.
+        if (tau_facil > 0) {
+                U_se = U_se*exp(-(t - tsyn_fac)/tau_facil) :update facilitation variable if tau_facil>0 Eq. 2 in Fuhrmann et al.
            } else {
-                  u = Use  
+                  U_se = U1  
            } 
-           if(Fac > 0){
-                  u = u + Use*(1-u) :update facilitation variable if Fac>0 Eq. 2 in Fuhrmann et al.
+           if(tau_facil > 0){
+                  U_se = U_se + U1*(1-U_se) :update facilitation variable if tau_facil>0 Eq. 2 in Fuhrmann et al.
            }    
 
 	   : tsyn_fac knows about all spikes, not only those that released
@@ -233,12 +237,12 @@ ENDVERBATIM
 
 	   : recovery
 
-	   if (Rstate == 0) {
-	   : probability of survival of unrecovered state based on Poisson recovery with rate 1/tau
-	          Psurv = exp(-(t-tsyn)/Dep)
+	   if (R == 0) {
+	   : probability of survival of unrecovered state based on Poisson recovery with rate 1/tau_rec
+	          Psurv = exp(-(t-tsyn)/tau_rec)
 		  result = urand()
 		  if (result>Psurv) {
-		         Rstate = 1     : recover      
+		         R = 1     : recover      
 
                          if( verboseLevel > 0 ) {
                              printf( "Recovered! %f at time %g: Psurv = %g, urand=%g\n", synapseID, t, Psurv, result )
@@ -254,12 +258,12 @@ ENDVERBATIM
 		  }
            }	   
 	   
-	   if (Rstate == 1) {
+	   if (R == 1) {
    	          result = urand()
-		  if (result<u) {
+		  if (result<U_se) {
 		  : release!
    		         tsyn = t
-			 Rstate = 0
+			 R = 0
                          A_AMPA = A_AMPA + weight_AMPA*factor_AMPA
                          B_AMPA = B_AMPA + weight_AMPA*factor_AMPA
                          A_NMDA = A_NMDA + weight_NMDA*factor_NMDA
